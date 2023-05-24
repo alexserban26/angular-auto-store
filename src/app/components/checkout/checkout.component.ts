@@ -2,6 +2,11 @@ import { CartService } from './../../services/cart.service';
 import { ShopFormService } from './../../services/shop-form.service';
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
+import { Order } from 'src/app/common/order';
+import { OrderItem } from 'src/app/common/order-item';
+import { Purchase } from 'src/app/common/purchase';
+import { CheckoutService } from 'src/app/services/checkout.service';
 import { AutoStoreValidators } from 'src/app/validators/auto-store-validators';
 
 @Component({
@@ -20,10 +25,12 @@ export class CheckoutComponent implements OnInit {
 
   constructor(private formBuilder: FormBuilder,
               private shopFormService: ShopFormService,
-              private cartService: CartService) { }
+              private cartService: CartService,
+              private checkoutService: CheckoutService,
+              private router: Router) { }
 
   ngOnInit(): void {
-    
+
     this.reviewCartDetails();
 
     this.checkoutFormGroup = this.formBuilder.group({
@@ -76,10 +83,48 @@ export class CheckoutComponent implements OnInit {
   }
 
   onSubmit(){
-    if(this.checkoutFormGroup.invalid){
+    console.log(this.checkoutFormGroup)
+    if(this.checkoutFormGroup.invalid) {
       this.checkoutFormGroup.markAllAsTouched();
+      return;
     }
 
+    let order = new Order();
+    order.totalPrice = this.totalPrice;
+    order.totalQuantity = this.totalQuantity;
+
+    const cartItems = this.cartService.cartItems;
+    let orderItems: OrderItem[] = cartItems.map(tempCartItem => new OrderItem(tempCartItem));
+
+    let purchase =  new Purchase();
+    purchase.customer = this.checkoutFormGroup.controls['customer'].value;
+    purchase.shippingAddress =  this.checkoutFormGroup.controls['shippingAddress'].value;
+    purchase.billingAddress =  this.checkoutFormGroup.controls['billingAddress'].value;
+    purchase.order = order;
+    purchase.orderItems = orderItems;
+
+    this.checkoutService.placeOrder(purchase).subscribe(
+      {
+        next: response => {
+          alert('Your order has been received.\nOrder tracking number: ' +  response.orderTrackingNumber);
+          this.resetCart();
+        },
+        error: err => {
+          alert('Error placing order.\n' + err.error.message);
+        }
+      }
+    );
+
+  }
+
+  resetCart() {
+    this.cartService.cartItems = [];
+    this.cartService.totalPrice.next(0);
+    this.cartService.totalQuantity.next(0);
+
+    this.checkoutFormGroup.reset();
+
+    this.router.navigateByUrl("/products");
   }
 
   get firstName(){ return this.checkoutFormGroup.get('customer.firstName');}
